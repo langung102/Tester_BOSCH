@@ -13,5 +13,6 @@
 
 extern int CYCLE;
 extern int BUTTON;
+extern char str[20];
 
 #endif /* INC_GLOBAL_H_ */

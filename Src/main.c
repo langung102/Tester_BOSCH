@@ -76,24 +76,12 @@ int datacheck1 = 0;
 
 int service_2E_state = 0;
 
-uint8_t data[7] = "\nlang";
-uint8_t buffer[9];
-
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
 	HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader1 ,RxData1);
 	if (RxHeader1.DLC == 2)
 	{
 		datacheck1 = 1;
-	}
-}
-
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-{
-	if(huart->Instance == huart1.Instance)
-	{
-		HAL_UART_Transmit(&huart1, buffer, 7, 200);
-		HAL_UART_Receive_IT(&huart1, buffer, 7);
 	}
 }
 
@@ -107,14 +95,15 @@ void do_service_22() {
 	  TxData1[1] = 0xF0;
 	  TxData1[2] = 0x01;
 
-	  if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader1, TxData1, &TxMailbox) == HAL_OK){
-		  HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, 1);
-	  }
 	  if (datacheck1) {
 		  HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, 0);
+		  datacheck1 = 0;
 		  uint32_t result = RxData1[3];
+	  } else {
+		  if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader1, TxData1, &TxMailbox) == HAL_OK){
+			  HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, 1);
+		  }
 	  }
-	  HAL_Delay(1000);
 }
 
 void do_service_2E(int index) {
@@ -200,8 +189,7 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim2);
   HAL_CAN_Start(&hcan1);
   HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
-  HAL_UART_Receive_IT(&huart1, buffer, 7);
-  int service = 0x22;
+  uint8_t service = 0x22;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -225,6 +213,7 @@ int main(void)
 		default:
 			break;
 	  }
+	  HAL_Delay(1000);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -444,7 +433,6 @@ static void MX_GPIO_Init(void)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 	if(htim->Instance == htim2.Instance)
 	{
-		HAL_UART_Transmit(&huart1, data, 7, 500);
 		runTimer();
 		button_reading();
 	}
