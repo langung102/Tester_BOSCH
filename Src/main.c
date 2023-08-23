@@ -25,6 +25,7 @@
 #include "software_timer.h"
 #include "input_processing.h"
 #include "input_reading.h"
+#include "stdio.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -75,82 +76,100 @@ uint32_t TxMailbox;
 int datacheck1 = 0;
 
 int service_2E_state = 0;
+int cur_button = 0;
 
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
 	HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader1 ,RxData1);
-	if (RxHeader1.DLC == 2)
-	{
-		datacheck1 = 1;
-	}
+	datacheck1 = 1;
+	HAL_GPIO_TogglePin(LED1_GPIO_Port, LED1_Pin);
 }
 
 void do_service_22() {
-	  TxHeader1.DLC   = 3;
-	  TxHeader1.IDE   = CAN_ID_STD;
-	  TxHeader1.RTR   = CAN_RTR_DATA;
-	  TxHeader1.StdId = 0x012;
-
-	  TxData1[0] = 0x22;
-	  TxData1[1] = 0xF0;
-	  TxData1[2] = 0x01;
-
 	  if (datacheck1) {
 		  HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, 0);
 		  datacheck1 = 0;
-		  uint32_t result = RxData1[3];
+		  uint16_t result = (RxData1[3] << 8) | (RxData1[4] << 0);
+		  HAL_UART_Transmit(&huart1, (void *)str , sprintf(str, "%d\r\n", result), 1000);
 	  } else {
+      TxHeader1.DLC   = 3;
+      TxHeader1.IDE   = CAN_ID_STD;
+      TxHeader1.RTR   = CAN_RTR_DATA;
+      TxHeader1.StdId = 0x012;
+
+      TxData1[0] = 0x22;
+      TxData1[1] = 0xF0;
+      TxData1[2] = 0x01;
 		  if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader1, TxData1, &TxMailbox) == HAL_OK){
 			  HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, 1);
 		  }
 	  }
 }
 
-void do_service_2E(int index) {
-	if(is_button_pressed_1s(index)) {
-		switch (service_2E_state) {
-			case 0:
-				TxHeader1.DLC   = 3;
-				TxHeader1.IDE   = CAN_ID_STD;
-				TxHeader1.RTR   = CAN_RTR_DATA;
-				TxHeader1.StdId = 0x012;
+void do_service_2E() {
+  switch (service_2E_state) {
+    case 0:
+      for (cur_button=0; cur_button<5; cur_button++) {
+        if (check_button_flag(cur_button)) {
+          service_2E_state = 1;
+        }
+      }
+    break;
+    case 1:
+      if (datacheck1) {
+        HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, 0);
+        datacheck1 = 0;
+        if (((RxData1[0] >> 4) & 0X0F) == 0x03) {
+        	service_2E_state = 2;
+        }
+      } else {
+        TxHeader1.DLC   = 8;
+        TxHeader1.IDE   = CAN_ID_STD;
+        TxHeader1.RTR   = CAN_RTR_DATA;
+        TxHeader1.StdId = 0x012;
 
-				TxData1[0] = 0x2E;
-				TxData1[1] = 0xF0;
-				TxData1[2] = 0x02;
-				TxData1[3] = 0x11;
-				service_2E_state = 1;
-				break;
-			case 1:
-				if (datacheck1 == 1 && RxData1[0] == 0xF0 && RxData1[1] == 0x02) {
-					service_2E_state = 2;
-					datacheck1 = 0;
-				}
-				break;
-			case 2:
-				for (int i=0; i<5; i++) {
-					TxHeader1.DLC   = 3;
-					TxHeader1.IDE   = CAN_ID_STD;
-					TxHeader1.RTR   = CAN_RTR_DATA;
-					TxHeader1.StdId = 0x012;
+        TxData1[0] = 0x10;
+        TxData1[1] = 0x06;
+        TxData1[2] = 0x2E;
+        TxData1[3] = 0xF0;
+        TxData1[4] = 0x02;
+        TxData1[5] = (uint8_t) cur_button;
+        TxData1[6] = (uint8_t) cur_button;
+        TxData1[7] = (uint8_t) cur_button;
 
-					TxData1[0] = 0x02;
-					TxData1[1] = 0xF0;
-					TxData1[2] = 0x02;
-					HAL_CAN_AddTxMessage(&hcan1, &TxHeader1, TxData1, &TxMailbox);
-				}
-				break;
-			case 3:
+        if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader1, TxData1, &TxMailbox) == HAL_OK){
+          HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, 1);
+        }
+      }
+    break;
+    case 2:
+    	for (int i=1; i<4; i++) {
+            TxHeader1.DLC   = 4;
+            TxHeader1.IDE   = CAN_ID_STD;
+            TxHeader1.RTR   = CAN_RTR_DATA;
+            TxHeader1.StdId = 0x012;
 
-				break;
-			default:
-				break;
-		}
-	}
-	else if(check_button_flag(index)) {
-		service_2E_state = 0;
-		HAL_CAN_AddTxMessage(&hcan1, &TxHeader1, TxData1, &TxMailbox);
-	}
+            TxData1[0] = ((0x02 << 4) & 0xFF) | i;
+            TxData1[1] = (uint8_t) cur_button;
+            TxData1[2] = (uint8_t) cur_button;
+            TxData1[3] = (uint8_t) cur_button;
+
+            if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader1, TxData1, &TxMailbox) == HAL_OK){
+              HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, 1);
+            }
+            HAL_Delay(50);
+    	}
+    	service_2E_state = 3;
+    break;
+    case 3:
+    	if (datacheck1) {
+            if (((RxData1[0] >> 4) & 0X0F) == 0x03) {
+            	service_2E_state = 0;
+            }
+            HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, 0);
+            HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, 0);
+    	}
+  }
 }
 /* USER CODE END 0 */
 
@@ -189,7 +208,7 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim2);
   HAL_CAN_Start(&hcan1);
   HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
-  uint8_t service = 0x22;
+  uint8_t service = 0x2E;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -202,11 +221,7 @@ int main(void)
 			do_service_22();
 			break;
 		case 0x2E:
-			for (int i=0; i<5; i++) {
-				if (check_button_flag(i)) {
-					do_service_2E(i);
-				}
-			}
+			do_service_2E();
 			break;
 		case 0x27:
 			break;
