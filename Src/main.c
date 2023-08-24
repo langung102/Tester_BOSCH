@@ -288,10 +288,12 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim2);
   HAL_CAN_Start(&hcan1);
   HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
-  uint8_t service = 0x27;
+
   lcd_init();
   ST7789_Init();
   ST7789_Fill_Color(WHITE);
+
+  uint8_t service = 0x27;
   /* USER CODE END 2 */
 
   /* Infinite loop */
