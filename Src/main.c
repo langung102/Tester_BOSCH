@@ -132,11 +132,15 @@ void do_service_2E() {
         TxHeader1.RTR   = CAN_RTR_DATA;
         TxHeader1.StdId = 0x012;
 
+        //PCI
         TxData1[0] = 0x10;
         TxData1[1] = 0x06;
+        //SID
         TxData1[2] = 0x2E;
+        //DID
         TxData1[3] = 0xF0;
         TxData1[4] = 0x02;
+        //Data
         TxData1[5] = (uint8_t) cur_button;
         TxData1[6] = (uint8_t) cur_button;
         TxData1[7] = (uint8_t) cur_button;
@@ -148,28 +152,28 @@ void do_service_2E() {
       }
       break;
     case 2:
-    	for (int i=1; i<4; i++) {
-            TxHeader1.DLC   = 4;
-            TxHeader1.IDE   = CAN_ID_STD;
-            TxHeader1.RTR   = CAN_RTR_DATA;
-            TxHeader1.StdId = 0x012;
+    	TxHeader1.DLC   = 4;
+    	TxHeader1.IDE   = CAN_ID_STD;
+    	TxHeader1.RTR   = CAN_RTR_DATA;
+    	TxHeader1.StdId = 0x012;
 
-            TxData1[0] = ((0x02 << 4) & 0xFF) | i;
-            TxData1[1] = (uint8_t) cur_button;
-            TxData1[2] = (uint8_t) cur_button;
-            TxData1[3] = (uint8_t) cur_button;
+    	//PCI
+    	TxData1[0] = ((0x02 << 4) & 0xFF) | 0x01;
+    	//DATA
+    	TxData1[1] = (uint8_t) cur_button;
+    	TxData1[2] = (uint8_t) cur_button;
+    	TxData1[3] = (uint8_t) cur_button;
 
-            HAL_UART_Transmit(&huart1, "Service 2E: Sending CF\r\n" , 30, 1000);
-            if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader1, TxData1, &TxMailbox) == HAL_OK){
-              HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, 1);
-            }
-            HAL_Delay(50);
+    	HAL_UART_Transmit(&huart1, "Service 2E: Sending CF\r\n" , 30, 1000);
+    	if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader1, TxData1, &TxMailbox) == HAL_OK){
+    		HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, 1);
     	}
+    	HAL_Delay(50);
     	service_2E_state = 3;
     	break;
     case 3:
     	if (datacheck1) {
-            if (((RxData1[0] >> 4) & 0X0F) == 0x03) {
+            if (((RxData1[0] >> 4) & 0X0F) == 0x03 && RxData1[1] == (0x2E + 0x40)) {
             	HAL_UART_Transmit(&huart1, "Service 2E: Done\r\n" , 30, 1000);
             	service_2E_state = 0;
             }
@@ -183,12 +187,12 @@ void do_service_27() {
 	switch (service_27_state) {
 		case 0:
 			if (datacheck1) {
-		        if (RxData1[0] == (0x27 + 0x40)) {
+		        if (RxData1[0] == (0x27 + 0x40) && RxData1[1] == 0x01) {
 		        	HAL_UART_Transmit(&huart1, "Service 27: Received seed\r\n" , 30, 1000);
 		        	service_27_state = 1;
 		        }
 		        datacheck1 = 0;
-			} else if (1) {
+			} else if (check_button_flag(5)) {
 		        TxHeader1.DLC   = 2;
 		        TxHeader1.IDE   = CAN_ID_STD;
 		        TxHeader1.RTR   = CAN_RTR_DATA;
@@ -216,6 +220,7 @@ void do_service_27() {
 			TxData1[3] = RxData1[3] + 1;
 			TxData1[4] = RxData1[4] + 1;
 			TxData1[5] = RxData1[5] + 1;
+
 			HAL_UART_Transmit(&huart1, lcd_str, sprintf(lcd_str, "%d:%d:%d:%d\r\n", TxData1[2], TxData1[3], TxData1[4], TxData1[5]), 1000);
 	        if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader1, TxData1, &TxMailbox) == HAL_OK){
 	        	HAL_UART_Transmit(&huart1, "Service 27: Sending key\r\n" , 30, 1000);
@@ -227,7 +232,7 @@ void do_service_27() {
 			if (datacheck1) {
 				if (RxData1[0] == (0x27 + 0x40) && RxData1[1] == 0x02) {
 					HAL_UART_Transmit(&huart1, "Service 27: Done\r\n" , 30, 1000);
-					service_27_state = 4;
+					service_27_state = 0;
 				}
 			}
 			break;
