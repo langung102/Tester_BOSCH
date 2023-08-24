@@ -26,6 +26,8 @@
 #include "input_processing.h"
 #include "input_reading.h"
 #include "stdio.h"
+#include "LCD_driver.h"
+#include "st7789.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -43,6 +45,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+ADC_HandleTypeDef hadc1;
+
 CAN_HandleTypeDef hcan1;
 
 TIM_HandleTypeDef htim2;
@@ -60,6 +64,7 @@ static void MX_CAN1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_SPI1_Init(void);
+static void MX_ADC1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -94,6 +99,11 @@ void do_service_22() {
 		  datacheck1 = 0;
 		  uint16_t result = (RxData1[3] << 8) | (RxData1[4] << 0);
 		  HAL_UART_Transmit(&huart1, (void *)str , sprintf(str, "%d\r\n", result), 1000);
+
+	      sprintf(lcd_str, "ADC received: %d", result);
+
+	      ST7789_Fill_Color(WHITE);
+	      ST7789_WriteString(10, 20, lcd_str, Font_11x18, RED, WHITE);
 	  } else {
       TxHeader1.DLC   = 3;
       TxHeader1.IDE   = CAN_ID_STD;
@@ -167,9 +177,9 @@ void do_service_2E() {
     	HAL_UART_Transmit(&huart1, "Service 2E: Sending CF\r\n" , 30, 1000);
     	if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader1, TxData1, &TxMailbox) == HAL_OK){
     		HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, 1);
+    		service_2E_state = 3;
     	}
     	HAL_Delay(50);
-    	service_2E_state = 3;
     	break;
     case 3:
     	if (datacheck1) {
@@ -221,7 +231,6 @@ void do_service_27() {
 			TxData1[4] = RxData1[4] + 1;
 			TxData1[5] = RxData1[5] + 1;
 
-			HAL_UART_Transmit(&huart1, lcd_str, sprintf(lcd_str, "%d:%d:%d:%d\r\n", TxData1[2], TxData1[3], TxData1[4], TxData1[5]), 1000);
 	        if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader1, TxData1, &TxMailbox) == HAL_OK){
 	        	HAL_UART_Transmit(&huart1, "Service 27: Sending key\r\n" , 30, 1000);
 	        	service_27_state = 2;
@@ -274,11 +283,15 @@ int main(void)
   MX_TIM2_Init();
   MX_USART1_UART_Init();
   MX_SPI1_Init();
+  MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start_IT(&htim2);
   HAL_CAN_Start(&hcan1);
   HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
   uint8_t service = 0x27;
+  lcd_init();
+  ST7789_Init();
+  ST7789_Fill_Color(WHITE);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -300,7 +313,7 @@ int main(void)
 		default:
 			break;
 	  }
-	  HAL_Delay(10);
+	  HAL_Delay(20);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -351,6 +364,58 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief ADC1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC1_Init(void)
+{
+
+  /* USER CODE BEGIN ADC1_Init 0 */
+
+  /* USER CODE END ADC1_Init 0 */
+
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC1_Init 1 */
+
+  /* USER CODE END ADC1_Init 1 */
+
+  /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
+  */
+  hadc1.Instance = ADC1;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
+  hadc1.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc1.Init.ScanConvMode = DISABLE;
+  hadc1.Init.ContinuousConvMode = DISABLE;
+  hadc1.Init.DiscontinuousConvMode = DISABLE;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc1.Init.NbrOfConversion = 1;
+  hadc1.Init.DMAContinuousRequests = DISABLE;
+  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  if (HAL_ADC_Init(&hadc1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
+  */
+  sConfig.Channel = ADC_CHANNEL_10;
+  sConfig.Rank = 1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC1_Init 2 */
+
+  /* USER CODE END ADC1_Init 2 */
+
 }
 
 /**
