@@ -14,5 +14,6 @@
 extern int CYCLE;
 extern int BUTTON;
 extern char str[20];
+extern SPI_HandleTypeDef hspi1;
 
 #endif /* INC_GLOBAL_H_ */

@@ -7,7 +7,7 @@
 
 #include "input_reading.h"
 
-#define NO_OF_BUTTONS					5
+#define NO_OF_BUTTONS					6
 #define DURATION_FOR_AUTO_INCREASING	100
 #define BUTTON_IS_PRESSED				GPIO_PIN_RESET
 #define BUTTON_IS_RELEASED				GPIO_PIN_SET
@@ -47,6 +47,9 @@ void button_reading(void) {
 				break;
 			case 4:
 				debounceButtonBuffer1[i] = HAL_GPIO_ReadPin(CTR_GPIO_Port, CTR_Pin);
+				break;
+			case 5:
+				debounceButtonBuffer1[i] = HAL_GPIO_ReadPin(BUTTON_GPIO_Port, BUTTON_Pin);
 				break;
 			default:
 				break;

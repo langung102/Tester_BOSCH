@@ -59,6 +59,8 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define CTR_Pin GPIO_PIN_13
 #define CTR_GPIO_Port GPIOC
+#define BUTTON_Pin GPIO_PIN_1
+#define BUTTON_GPIO_Port GPIOA
 #define A_Pin GPIO_PIN_4
 #define A_GPIO_Port GPIOC
 #define B_Pin GPIO_PIN_5
@@ -67,8 +69,6 @@ void Error_Handler(void);
 #define LED_GPIO_Port GPIOB
 #define LED1_Pin GPIO_PIN_1
 #define LED1_GPIO_Port GPIOB
-#define LED2_Pin GPIO_PIN_2
-#define LED2_GPIO_Port GPIOB
 #define C_Pin GPIO_PIN_6
 #define C_GPIO_Port GPIOC
 #define D_Pin GPIO_PIN_7

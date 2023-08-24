@@ -59,6 +59,7 @@ static void MX_GPIO_Init(void);
 static void MX_CAN1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_SPI1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -76,7 +77,9 @@ uint32_t TxMailbox;
 int datacheck1 = 0;
 
 int service_2E_state = 0;
+int service_27_state = 0;
 int cur_button = 0;
+char lcd_str[10];
 
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
@@ -114,12 +117,13 @@ void do_service_2E() {
           service_2E_state = 1;
         }
       }
-    break;
+      break;
     case 1:
       if (datacheck1) {
         HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, 0);
         datacheck1 = 0;
-        if (((RxData1[0] >> 4) & 0X0F) == 0x03) {
+        if (((RxData1[0] >> 4) & 0X0F) == 0x03 && RxData1[1] == (0x2E + 0x40)) {
+        	HAL_UART_Transmit(&huart1, "service 2E: Received FC\r\n" , 30, 1000);
         	service_2E_state = 2;
         }
       } else {
@@ -137,11 +141,12 @@ void do_service_2E() {
         TxData1[6] = (uint8_t) cur_button;
         TxData1[7] = (uint8_t) cur_button;
 
+        HAL_UART_Transmit(&huart1, "Service 2E: Sending FF\r\n" , 30, 1000);
         if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader1, TxData1, &TxMailbox) == HAL_OK){
           HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, 1);
         }
       }
-    break;
+      break;
     case 2:
     	for (int i=1; i<4; i++) {
             TxHeader1.DLC   = 4;
@@ -154,22 +159,81 @@ void do_service_2E() {
             TxData1[2] = (uint8_t) cur_button;
             TxData1[3] = (uint8_t) cur_button;
 
+            HAL_UART_Transmit(&huart1, "Service 2E: Sending CF\r\n" , 30, 1000);
             if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader1, TxData1, &TxMailbox) == HAL_OK){
               HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, 1);
             }
             HAL_Delay(50);
     	}
     	service_2E_state = 3;
-    break;
+    	break;
     case 3:
     	if (datacheck1) {
             if (((RxData1[0] >> 4) & 0X0F) == 0x03) {
+            	HAL_UART_Transmit(&huart1, "Service 2E: Done\r\n" , 30, 1000);
             	service_2E_state = 0;
             }
             HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, 0);
             HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, 0);
     	}
   }
+}
+
+void do_service_27() {
+	switch (service_27_state) {
+		case 0:
+			if (datacheck1) {
+		        if (RxData1[0] == (0x27 + 0x40)) {
+		        	HAL_UART_Transmit(&huart1, "Service 27: Received seed\r\n" , 30, 1000);
+		        	service_27_state = 1;
+		        }
+		        datacheck1 = 0;
+			} else if (1) {
+		        TxHeader1.DLC   = 2;
+		        TxHeader1.IDE   = CAN_ID_STD;
+		        TxHeader1.RTR   = CAN_RTR_DATA;
+		        TxHeader1.StdId = 0x012;
+
+		        TxData1[0] = 0x27;
+		        TxData1[1] = 0x01;
+
+		        HAL_UART_Transmit(&huart1, "Service 27: Request seed\r\n" , 30, 1000);
+		        if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader1, TxData1, &TxMailbox) == HAL_OK){
+		          HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, 1);
+		        }
+			}
+
+			break;
+		case 1:
+	        TxHeader1.DLC   = 2;
+	        TxHeader1.IDE   = CAN_ID_STD;
+	        TxHeader1.RTR   = CAN_RTR_DATA;
+	        TxHeader1.StdId = 0x012;
+
+			TxData1[0] = 0x27;
+			TxData1[1] = 0x02;
+			TxData1[2] = RxData1[2] + 1;
+			TxData1[3] = RxData1[3] + 1;
+			TxData1[4] = RxData1[4] + 1;
+			TxData1[5] = RxData1[5] + 1;
+			HAL_UART_Transmit(&huart1, lcd_str, sprintf(lcd_str, "%d:%d:%d:%d\r\n", TxData1[2], TxData1[3], TxData1[4], TxData1[5]), 1000);
+	        if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader1, TxData1, &TxMailbox) == HAL_OK){
+	        	HAL_UART_Transmit(&huart1, "Service 27: Sending key\r\n" , 30, 1000);
+	        	service_27_state = 2;
+	        }
+
+			break;
+		case 2:
+			if (datacheck1) {
+				if (RxData1[0] == (0x27 + 0x40) && RxData1[1] == 0x02) {
+					HAL_UART_Transmit(&huart1, "Service 27: Done\r\n" , 30, 1000);
+					service_27_state = 4;
+				}
+			}
+			break;
+		default:
+			break;
+	}
 }
 /* USER CODE END 0 */
 
@@ -204,11 +268,12 @@ int main(void)
   MX_CAN1_Init();
   MX_TIM2_Init();
   MX_USART1_UART_Init();
+  MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start_IT(&htim2);
   HAL_CAN_Start(&hcan1);
   HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
-  uint8_t service = 0x2E;
+  uint8_t service = 0x27;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -224,11 +289,13 @@ int main(void)
 			do_service_2E();
 			break;
 		case 0x27:
+			HAL_UART_Transmit(&huart1, "Service 27: Start\r\n" , 30, 1000);
+			do_service_27();
 			break;
 		default:
 			break;
 	  }
-	  HAL_Delay(1000);
+	  HAL_Delay(10);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -332,6 +399,44 @@ static void MX_CAN1_Init(void)
 }
 
 /**
+  * @brief SPI1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI1_Init(void)
+{
+
+  /* USER CODE BEGIN SPI1_Init 0 */
+
+  /* USER CODE END SPI1_Init 0 */
+
+  /* USER CODE BEGIN SPI1_Init 1 */
+
+  /* USER CODE END SPI1_Init 1 */
+  /* SPI1 parameter configuration*/
+  hspi1.Instance = SPI1;
+  hspi1.Init.Mode = SPI_MODE_MASTER;
+  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi1.Init.CLKPolarity = SPI_POLARITY_HIGH;
+  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi1.Init.NSS = SPI_NSS_HARD_OUTPUT;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;
+  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi1.Init.CRCPolynomial = 10;
+  if (HAL_SPI_Init(&hspi1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI1_Init 2 */
+
+  /* USER CODE END SPI1_Init 2 */
+
+}
+
+/**
   * @brief TIM2 Initialization Function
   * @param None
   * @retval None
@@ -421,11 +526,12 @@ static void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
-  __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, LED_Pin|LED1_Pin|LED2_Pin|LED3_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, LED_Pin|LED1_Pin|GPIO_PIN_2|LED3_Pin
+                          |GPIO_PIN_6|GPIO_PIN_7|GPIO_PIN_8|GPIO_PIN_9, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : CTR_Pin A_Pin B_Pin C_Pin
                            D_Pin */
@@ -435,11 +541,25 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : LED_Pin LED1_Pin LED2_Pin LED3_Pin */
-  GPIO_InitStruct.Pin = LED_Pin|LED1_Pin|LED2_Pin|LED3_Pin;
+  /*Configure GPIO pin : BUTTON_Pin */
+  GPIO_InitStruct.Pin = BUTTON_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(BUTTON_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : LED_Pin LED1_Pin PB2 LED3_Pin
+                           PB6 PB7 PB8 PB9 */
+  GPIO_InitStruct.Pin = LED_Pin|LED1_Pin|GPIO_PIN_2|LED3_Pin
+                          |GPIO_PIN_6|GPIO_PIN_7|GPIO_PIN_8|GPIO_PIN_9;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PB4 */
+  GPIO_InitStruct.Pin = GPIO_PIN_4;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
 }

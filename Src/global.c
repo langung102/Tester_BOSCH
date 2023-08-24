@@ -10,3 +10,4 @@
 int CYCLE = 10;
 int BUTTON = 0;
 char str[20];
+SPI_HandleTypeDef hspi1;
